@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Rolo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #f2f2f2;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .metrics {
+    flex: 3;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #141414;
+  }
+  .metric .value {
+    font-size: 9vw;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric .label {
+    font-size: 1.4vw;
+    letter-spacing: 0.15em;
+    color: #999;
+    margin-top: 0.6vw;
+    text-transform: uppercase;
+  }
+  #hr .value { color: #ff4d4d; }
+  #power .value { color: #ffcc00; }
+  #cadence .value { color: #4dd2ff; }
+  #total_time .value { color: #f2f2f2; font-size: 6.5vw; }
+
+  .step-panel {
+    flex: 1.4;
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1.5vw 3vw;
+    border-top: 2px solid #333;
+  }
+  .step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.8vw;
+  }
+  .step-name {
+    font-size: 3vw;
+    font-weight: 700;
+  }
+  .step-counter {
+    font-size: 1.6vw;
+    color: #999;
+  }
+  .step-remaining {
+    font-size: 4vw;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #4dff88;
+  }
+  .progress-bar-bg {
+    width: 100%;
+    height: 1.4vw;
+    background: #2a2a2a;
+    border-radius: 1vw;
+    margin-top: 1vw;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4dff88, #4dd2ff);
+    width: 0%;
+    transition: width 0.9s linear;
+  }
+  .intensity-tag {
+    display: inline-block;
+    padding: 0.2vw 1vw;
+    border-radius: 0.4vw;
+    font-size: 1.2vw;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 1vw;
+  }
+  .intensity-active   { background: #4dd2ff33; color: #4dd2ff; }
+  .intensity-rest      { background: #99999933; color: #ccc; }
+  .intensity-warmup   { background: #ffcc0033; color: #ffcc00; }
+  .intensity-cooldown { background: #4dff8833; color: #4dff88; }
+
+  .finished-banner {
+    text-align: center;
+    font-size: 4vw;
+    color: #4dff88;
+    padding: 2vw;
+  }
+  .export-bar {
+    position: fixed;
+    top: 1vw;
+    right: 1vw;
+    display: flex;
+    gap: 0.8vw;
+  }
+  .export-btn, .next-btn {
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #444;
+    padding: 0.5vw 1.2vw;
+    border-radius: 0.4vw;
+    font-size: 1.1vw;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+  }
+  .export-btn:hover, .next-btn:hover { background: #3a3a3a; }
+  .next-btn {
+    display: none;
+    margin-top: 1vw;
+    align-self: flex-start;
+    border-color: #4dd2ff;
+    color: #4dd2ff;
+    font-size: 1.4vw;
+    padding: 0.6vw 1.6vw;
+  }
+</style>
+</head>
+<body>
+
+<div class="export-bar">
+  <a class="export-btn" href="/export/tcx">Exportar .tcx</a>
+  <a class="export-btn" href="/export/xlsx">Exportar .xlsx</a>
+</div>
+
+<div class="metrics">
+  <div class="metric" id="hr">
+    <div class="value" id="hr_value">--</div>
+    <div class="label">FC (bpm)</div>
+  </div>
+  <div class="metric" id="power">
+    <div class="value" id="power_value">--</div>
+    <div class="label">Potência (W)</div>
+  </div>
+  <div class="metric" id="cadence">
+    <div class="value" id="cadence_value">--</div>
+    <div class="label">Cadência (rpm)</div>
+  </div>
+  <div class="metric" id="total_time">
+    <div class="value" id="total_time_value">00:00:00</div>
+    <div class="label">Tempo Total</div>
+  </div>
+</div>
+
+<div class="step-panel" id="step_panel">
+  <div class="step-header">
+    <div>
+      <span class="intensity-tag" id="intensity_tag">--</span>
+      <span class="step-name" id="step_name">Aguardando etapas...</span>
+    </div>
+    <div class="step-counter" id="step_counter">0/0</div>
+  </div>
+  <div class="step-remaining" id="step_remaining">--:--</div>
+  <div class="progress-bar-bg">
+    <div class="progress-bar-fill" id="progress_fill"></div>
+  </div>
+  <button class="next-btn" id="next_btn">Avançar etapa →</button>
+</div>
+
+<script>
+// Polling simples via fetch em vez de WebSocket/Socket.IO: pra um update
+// por segundo, não compensa carregar flask-socketio + eventlet no servidor
+// nem depender de um CDN externo (que quebraria o dashboard sem internet
+// na sala de treino). Fetch local a cada 1s cobre a mesma necessidade.
+const POLL_INTERVAL_MS = 1000;
+
+function fmtHMS(totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+}
+
+function fmtMS(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined) return '--:--';
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function render(d) {
+  document.getElementById('hr_value').textContent = d.heart_rate || '--';
+  document.getElementById('power_value').textContent = d.power || '--';
+  document.getElementById('cadence_value').textContent = d.cadence || '--';
+  document.getElementById('total_time_value').textContent = fmtHMS(d.total_elapsed_seconds);
+
+  const panel = document.getElementById('step_panel');
+
+  if (d.finished) {
+    panel.innerHTML = '<div class="finished-banner">TREINO CONCLUÍDO</div>';
+    return;
+  }
+
+  document.getElementById('step_name').textContent = d.current_step_name || '--';
+  document.getElementById('step_counter').textContent =
+    (d.current_step_index + 1) + '/' + d.total_steps;
+
+  const tag = document.getElementById('intensity_tag');
+  const intensity = d.current_step_intensity || 'active';
+  tag.textContent = intensity;
+  tag.className = 'intensity-tag intensity-' + intensity;
+
+  const remainEl = document.getElementById('step_remaining');
+  const nextBtn = document.getElementById('next_btn');
+  if (d.step_remaining_seconds !== null && d.step_remaining_seconds !== undefined) {
+    remainEl.textContent = fmtMS(d.step_remaining_seconds);
+    const pct = d.step_duration_seconds
+      ? 100 * (d.step_elapsed_seconds / d.step_duration_seconds)
+      : 0;
+    document.getElementById('progress_fill').style.width = Math.min(100, pct) + '%';
+    nextBtn.style.display = 'none';
+  } else {
+    remainEl.textContent = 'LIVRE — aperte "avançar etapa"';
+    document.getElementById('progress_fill').style.width = '0%';
+    nextBtn.style.display = 'inline-block';
+  }
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/snapshot');
+    render(await res.json());
+  } catch (e) {
+    // servidor momentaneamente indisponível — próximo tick tenta de novo
+  }
+}
+
+document.getElementById('next_btn').addEventListener('click', () => {
+  fetch('/next_step', { method: 'POST' }).then(poll);
+});
+
+poll();
+setInterval(poll, POLL_INTERVAL_MS);
+</script>
+
+</body>
+</html>
