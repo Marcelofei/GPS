@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Rolo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    color: #f2f2f2;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+  }
+
+  /* ---------- coluna principal (esquerda) ---------- */
+  .main-col {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .metrics {
+    flex: 3;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #141414;
+  }
+  .metric .value {
+    font-size: 7vw;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric .label {
+    font-size: 1.2vw;
+    letter-spacing: 0.15em;
+    color: #999;
+    margin-top: 0.6vw;
+    text-transform: uppercase;
+  }
+  #hr .value { color: #ff4d4d; }
+  #power .value { color: #ffcc00; }
+  #cadence .value { color: #4dd2ff; }
+  #total_time .value { color: #f2f2f2; font-size: 5vw; }
+
+  .metric-avg {
+    font-size: 1.1vw;
+    color: #777;
+    margin-top: 0.3vw;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metric {
+    border: 3px solid transparent;
+    transition: border-color 0.4s ease;
+  }
+  .metric.status-below { border-color: #ff8c42; }
+  .metric.status-above { border-color: #ff4d4d; }
+  .metric.status-in_range { border-color: #4dff8855; }
+  .target-arrow {
+    font-size: 1.6vw;
+    margin-top: 0.2vw;
+    font-weight: 700;
+  }
+  .target-arrow.below { color: #ff8c42; }
+  .target-arrow.above { color: #ff4d4d; }
+  .target-arrow.in_range { color: #4dff88; opacity: 0.6; }
+
+  .conn-banner {
+    position: fixed;
+    top: 1vw;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #3a1414;
+    border: 1px solid #ff4d4d;
+    color: #ffb3b3;
+    padding: 0.6vw 1.4vw;
+    border-radius: 0.5vw;
+    font-size: 1.1vw;
+    z-index: 20;
+    display: none;
+    align-items: center;
+    gap: 1vw;
+  }
+  .conn-banner.visible { display: flex; }
+  .conn-banner button {
+    background: #ff4d4d;
+    color: #1a0000;
+    border: none;
+    padding: 0.4vw 1vw;
+    border-radius: 0.3vw;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .step-panel {
+    flex: 1.4;
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1.5vw 3vw;
+    border-top: 2px solid #333;
+  }
+  .step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.8vw;
+  }
+  .step-name {
+    font-size: 2.6vw;
+    font-weight: 700;
+  }
+  .step-target {
+    font-size: 1.6vw;
+    font-weight: 700;
+    color: #4dff88;
+    margin-left: 1vw;
+  }
+  .step-counter {
+    font-size: 1.4vw;
+    color: #999;
+  }
+  .step-remaining {
+    font-size: 3.4vw;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #4dff88;
+  }
+  .paused-tag {
+    color: #ffcc00;
+  }
+  .progress-bar-bg {
+    width: 100%;
+    height: 1.2vw;
+    background: #2a2a2a;
+    border-radius: 1vw;
+    margin-top: 1vw;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4dff88, #4dd2ff);
+    width: 0%;
+    transition: width 0.25s linear;
+  }
+  .intensity-tag {
+    display: inline-block;
+    padding: 0.2vw 1vw;
+    border-radius: 0.4vw;
+    font-size: 1.1vw;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 1vw;
+  }
+  .intensity-active   { background: #4dd2ff33; color: #4dd2ff; }
+  .intensity-rest      { background: #99999933; color: #ccc; }
+  .intensity-warmup   { background: #ffcc0033; color: #ffcc00; }
+  .intensity-cooldown { background: #4dff8833; color: #4dff88; }
+  .intensity-recovery { background: #4dff8833; color: #4dff88; }
+
+  .finished-banner {
+    text-align: center;
+    font-size: 3vw;
+    color: #4dff88;
+    padding: 2vw;
+  }
+
+  .controls-row {
+    display: flex;
+    gap: 0.8vw;
+    margin-top: 1vw;
+  }
+
+  .step-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .start-gate {
+    display: none; /* mostrado via JS quando started=false */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1vw;
+  }
+  .start-gate-text {
+    font-size: 1.3vw;
+    color: #ccc;
+    max-width: 40vw;
+  }
+  .start-btn {
+    background: #1c2b26;
+    border: 2px solid #4dff88;
+    color: #4dff88;
+    font-size: 1.8vw;
+    font-weight: 700;
+    padding: 0.8vw 2.2vw;
+    border-radius: 0.5vw;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .start-btn:hover { background: #24382f; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-box {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 0.6vw;
+    padding: 2vw 2.5vw;
+    max-width: 32vw;
+    text-align: center;
+  }
+  .modal-box p {
+    font-size: 1.3vw;
+    color: #eee;
+    margin-bottom: 1.5vw;
+    line-height: 1.5;
+  }
+  .modal-box .modal-buttons {
+    display: flex;
+    gap: 1vw;
+    justify-content: center;
+  }
+  .modal-btn {
+    padding: 0.6vw 1.6vw;
+    border-radius: 0.4vw;
+    font-size: 1.1vw;
+    cursor: pointer;
+    border: 1px solid #555;
+    background: #2a2a2a;
+    color: #ccc;
+    font-family: inherit;
+  }
+  .modal-btn.confirm { border-color: #ff4d4d; color: #ff4d4d; }
+  .modal-btn.confirm:hover { background: #3a1414; }
+  .modal-btn.cancel:hover { background: #333; }
+  .modal-status {
+    font-size: 1.1vw;
+    color: #4dff88;
+    margin-top: 1vw;
+  }
+  .modal-status.error { color: #ff4d4d; }
+
+  .recover-banner {
+    position: fixed;
+    top: 4.5vw;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #3a2f14;
+    border: 1px solid #ffcc00;
+    color: #ffe9a8;
+    padding: 0.8vw 1.6vw;
+    border-radius: 0.5vw;
+    font-size: 1.1vw;
+    z-index: 20;
+    display: none;
+    align-items: center;
+    gap: 1vw;
+  }
+  .recover-banner.visible { display: flex; }
+  .recover-banner button {
+    border: none;
+    padding: 0.4vw 1vw;
+    border-radius: 0.3vw;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .recover-btn-export { background: #ffcc00; color: #1a1400; }
+  .recover-btn-dismiss { background: #444; color: #ccc; }
+
+  .export-bar {
+    position: fixed;
+    top: 1vw;
+    left: 1vw;
+    display: flex;
+    gap: 0.6vw;
+    z-index: 10;
+  }
+  .export-btn, .next-btn, .ctrl-btn {
+    background: #2a2a2a;
+    color: #ccc;
+    border: 1px solid #444;
+    padding: 0.5vw 1.1vw;
+    border-radius: 0.4vw;
+    font-size: 1vw;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+  }
+  .export-btn:hover, .next-btn:hover, .ctrl-btn:hover { background: #3a3a3a; }
+  .next-btn {
+    display: none;
+    align-self: flex-start;
+    border-color: #4dd2ff;
+    color: #4dd2ff;
+    font-size: 1.3vw;
+    padding: 0.6vw 1.5vw;
+  }
+  .ctrl-btn.pause-btn { border-color: #ffcc00; color: #ffcc00; }
+  .ctrl-btn.stop-btn { border-color: #ff4d4d; color: #ff4d4d; }
+
+  /* ---------- sidebar de próximas etapas (direita) ---------- */
+  .sidebar {
+    flex: 1;
+    max-width: 320px;
+    background: #111;
+    border-left: 2px solid #333;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 1.2vw 1.2vw 0.8vw;
+    font-size: 1vw;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.6vw;
+  }
+  .sidebar-item {
+    padding: 0.8vw 1vw;
+    margin-bottom: 0.5vw;
+    border-radius: 0.4vw;
+    background: #181818;
+    border-left: 3px solid #333;
+  }
+  .sidebar-item.is-current {
+    background: #1c2b26;
+    border-left-color: #4dff88;
+  }
+  .sidebar-item .si-name {
+    font-size: 1vw;
+    font-weight: 600;
+    margin-bottom: 0.2vw;
+  }
+  .sidebar-item .si-detail {
+    font-size: 0.85vw;
+    color: #999;
+  }
+  .sidebar-item .si-tag {
+    display: inline-block;
+    font-size: 0.7vw;
+    padding: 0.1vw 0.6vw;
+    border-radius: 0.3vw;
+    margin-bottom: 0.3vw;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<div class="export-bar">
+  <a class="export-btn" href="/export/tcx">Exportar .tcx</a>
+  <a class="export-btn" href="/export/xlsx">Exportar .xlsx</a>
+  <button class="export-btn" id="sound_toggle_btn">🔊 Som: ligado</button>
+</div>
+
+<div class="conn-banner" id="conn_banner">
+  <span id="conn_banner_text"></span>
+  <button id="reconnect_btn">Reconectar agora</button>
+</div>
+
+<div class="recover-banner" id="recover_banner">
+  <span id="recover_banner_text"></span>
+  <button class="recover-btn-export" id="recover_export_btn">Exportar sessão anterior</button>
+  <button class="recover-btn-dismiss" id="recover_dismiss_btn">Descartar</button>
+</div>
+
+<div class="modal-overlay" id="stop_modal_overlay">
+  <div class="modal-box">
+    <p>Encerrar o treino agora? Isso não pode ser desfeito.<br>
+       Ao confirmar, o .tcx e o .xlsx são baixados automaticamente.</p>
+    <div class="modal-buttons">
+      <button class="modal-btn cancel" id="stop_modal_cancel">Cancelar</button>
+      <button class="modal-btn confirm" id="stop_modal_confirm">Encerrar e exportar</button>
+    </div>
+    <div class="modal-status" id="stop_modal_status"></div>
+  </div>
+</div>
+
+<div class="main-col">
+  <div class="metrics">
+    <div class="metric" id="power">
+      <div class="value" id="power_value">--</div>
+      <div class="label">Potência (W)</div>
+      <div class="metric-avg" id="power_avg"></div>
+      <div class="target-arrow" id="power_arrow"></div>
+    </div>
+    <div class="metric" id="cadence">
+      <div class="value" id="cadence_value">--</div>
+      <div class="label">Cadência (rpm)</div>
+      <div class="metric-avg" id="cadence_avg"></div>
+      <div class="target-arrow" id="cadence_arrow"></div>
+    </div>
+    <div class="metric" id="total_time">
+      <div class="value" id="total_time_value">00:00:00</div>
+      <div class="label">Tempo Total</div>
+    </div>
+  </div>
+
+  <div class="step-panel" id="step_panel">
+    <div id="start_gate" class="start-gate">
+      <div class="start-gate-text">
+        Confira acima se FC, potência e cadência estão chegando.
+        Quando os sensores estiverem conectados:
+      </div>
+      <button class="start-btn" id="start_btn">Iniciar Treino</button>
+    </div>
+    <div id="step_content" class="step-content">
+      <div class="step-header">
+        <div>
+          <span class="intensity-tag" id="intensity_tag">--</span>
+          <span class="step-name" id="step_name">Aguardando etapas...</span>
+          <span class="step-target" id="step_target"></span>
+        </div>
+        <div class="step-counter" id="step_counter">0/0</div>
+      </div>
+      <div class="step-remaining" id="step_remaining">--:--</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress_fill"></div>
+      </div>
+      <div class="controls-row">
+        <button class="next-btn" id="next_btn">Avançar etapa →</button>
+        <button class="ctrl-btn pause-btn" id="pause_btn">Pausar</button>
+        <button class="ctrl-btn stop-btn" id="stop_btn">Encerrar treino</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sidebar">
+  <div class="sidebar-header">Próximas etapas</div>
+  <div class="sidebar-list" id="sidebar_list"></div>
+</div>
+
+<script>
+// Polling simples via fetch em vez de WebSocket/Socket.IO: pra um update
+// por segundo, não compensa carregar flask-socketio + eventlet no servidor
+// nem depender de um CDN externo (que quebraria o dashboard sem internet
+// na sala de treino). Fetch local a cada 1s cobre a mesma necessidade.
+const POLL_INTERVAL_MS = 1000;
+
+// Cronômetro: o valor exibido NÃO depende mais de quando o poll() chega —
+// se o navegador atrasar/agrupar os fetches (comum em abas em segundo
+// plano), o relógio continuava saltando de 2 em 2s. Agora o tempo total e
+// da etapa são recalculados localmente a cada 250ms, usando o último
+// snapshot como base + o tempo real decorrido desde então (interpolação),
+// e só resincronizam quando um novo snapshot chega de verdade.
+const CLOCK_RENDER_INTERVAL_MS = 250;
+let lastSnapshot = null;
+let lastSyncPerfMs = null;
+
+function fmtHMS(totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h, m, s].map(v => String(v).padStart(2, '0')).join(':');
+}
+
+function fmtMS(totalSeconds) {
+  if (totalSeconds === null || totalSeconds === undefined) return '--:--';
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+const TARGET_TYPE_LABELS = {
+  power: 'Potência',
+  heart_rate: 'FC',
+  cadence: 'Cadência',
+  speed: 'Velocidade',
+};
+
+// mapeia o tipo de alvo da etapa pro id do card de métrica correspondente.
+// 'heart_rate' de propósito NÃO tem entrada — não existe card de FC (a
+// dashboard não monitora FC ao vivo; ver ble_sensor_listener.py). Uma
+// etapa com alvo de FC ainda mostra o texto do alvo no painel/sidebar
+// (informativo), só não acende alerta em nenhum card, porque não teria
+// como avaliar isso sem dado ao vivo.
+const TARGET_TYPE_TO_METRIC_ID = {
+  power: 'power',
+  cadence: 'cadence',
+};
+
+const TARGET_ARROW_TEXT = {
+  below: '▲ subir',
+  above: '▼ baixar',
+  in_range: '● no alvo',
+};
+
+function fmtStepDetail(step) {
+  const parts = [];
+  if (step.duration_seconds) {
+    parts.push(fmtMS(step.duration_seconds));
+  } else {
+    parts.push('livre');
+  }
+  const hasLow = step.target_low !== null && step.target_low !== undefined;
+  const hasHigh = step.target_high !== null && step.target_high !== undefined;
+  if (step.target_type && step.target_type !== 'open' && hasLow) {
+    const label = TARGET_TYPE_LABELS[step.target_type] || step.target_type;
+    const unit = step.target_type === 'power' ? 'W' : (step.target_type === 'heart_rate' ? 'bpm' : '');
+    const highPart = hasHigh ? `-${step.target_high}` : '';
+    parts.push(`${label}: ${step.target_low}${highPart}${unit}`);
+  }
+  return parts.join(' · ');
+}
+
+function renderSidebar(d) {
+  const list = document.getElementById('sidebar_list');
+  const items = d.upcoming_steps || [];
+
+  if (items.length === 0) {
+    list.innerHTML = '<div class="sidebar-item">Treino concluído.</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((step, i) => {
+    const isCurrent = i === 0; // primeiro item da lista é sempre a etapa atual
+    return `
+      <div class="sidebar-item ${isCurrent ? 'is-current' : ''}">
+        <span class="si-tag intensity-${step.intensity}">${step.intensity}</span>
+        <div class="si-name">${step.label}</div>
+        <div class="si-detail">${fmtStepDetail(step)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderConnectionBanner(d) {
+  const banner = document.getElementById('conn_banner');
+  const text = document.getElementById('conn_banner_text');
+
+  // FC removida — só o rolo importa aqui (ver ble_sensor_listener.py)
+  if (d.trainer_connected !== false || d.finished) {
+    banner.classList.remove('visible');
+    return;
+  }
+
+  text.textContent = 'Sem conexão: rolo/trainer.';
+  banner.classList.add('visible');
+}
+
+function renderTargetIndicators(d) {
+  // limpa primeiro — só um fica marcado por vez (o que corresponde ao
+  // target_type da etapa atual). 'hr' não existe mais como card (FC
+  // removida — ver ble_sensor_listener.py), por isso não está mais nesta
+  // lista; uma etapa com alvo de FC simplesmente não acende nenhum card,
+  // já que não temos como medir isso ao vivo.
+  for (const id of ['power', 'cadence']) {
+    document.getElementById(id).classList.remove('status-below', 'status-above', 'status-in_range');
+    document.getElementById(id + '_arrow').textContent = '';
+  }
+
+  if (!d.target_status || !d.current_step_target_type) return;
+
+  const metricId = TARGET_TYPE_TO_METRIC_ID[d.current_step_target_type];
+  if (!metricId) return;
+
+  document.getElementById(metricId).classList.add('status-' + d.target_status);
+  const arrowEl = document.getElementById(metricId + '_arrow');
+  arrowEl.textContent = TARGET_ARROW_TEXT[d.target_status] || '';
+  arrowEl.className = 'target-arrow ' + d.target_status;
+}
+
+// ---------------------------------------------------------------------
+// Alertas sonoros: sintetizados via Web Audio API (sem arquivo de áudio
+// externo). Dois eventos disparam som:
+//   1. Faltam ~5s pra trocar de etapa (uma vez só por etapa, não repete)
+//   2. Sair/voltar pra zona-alvo de potência/cadência (só na transição,
+//      não fica apitando toda vez que o snapshot atualiza)
+// ---------------------------------------------------------------------
+let soundEnabled = true;
+
+function playTone(frequency, durationMs, volume) {
+  if (!soundEnabled) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return; // navegador sem suporte — falha silenciosa
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.frequency.value = frequency;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + durationMs / 1000);
+    oscillator.onended = () => ctx.close();
+  } catch (e) {
+    // Web Audio indisponível ou bloqueada (ex: precisa de interação do
+    // usuário primeiro) — silencioso, não quebra o resto do dashboard
+  }
+}
+
+function playStepEndingWarning() { playTone(900, 150, 0.25); }
+function playLeftZoneAlert() { playTone(300, 200, 0.25); }
+function playEnteredZoneAlert() { playTone(1200, 120, 0.2); }
+
+// estado de controle pra disparar cada som só UMA vez por evento, não a
+// cada poll/tick (senão vira um alarme contínuo em vez de um aviso)
+let lastStepIndexSeen = null;
+let stepEndWarningPlayedForThisStep = false;
+let lastTargetStatusSeen = null;
+
+function maybePlayTargetTransitionSound(d) {
+  const status = d.target_status || null;
+  if (status !== lastTargetStatusSeen) {
+    const enteringOutOfZone = (status === 'above' || status === 'below') &&
+      (lastTargetStatusSeen === 'in_range' || lastTargetStatusSeen === null);
+    const returningToZone = status === 'in_range' &&
+      (lastTargetStatusSeen === 'above' || lastTargetStatusSeen === 'below');
+
+    if (enteringOutOfZone) playLeftZoneAlert();
+    if (returningToZone) playEnteredZoneAlert();
+
+    lastTargetStatusSeen = status;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Wake Lock: impede a tela de apagar/o PC de dormir enquanto o dashboard
+// está aberto. Precisa ser readquirido quando a aba volta a ficar visível
+// (o navegador libera o lock sozinho quando a aba perde foco/minimiza).
+// ---------------------------------------------------------------------
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) {
+    // API indisponível ou negada — não é crítico, o dashboard segue funcionando
+  }
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (wakeLock !== null && document.visibilityState === 'visible') {
+    await requestWakeLock();
+  }
+});
+
+requestWakeLock();
+
+// Aplica um snapshot novo vindo do servidor: atualiza tudo que NÃO precisa
+// de suavização por interpolação (valores de sensor, médias, sidebar,
+// botões, banner de conexão). O relógio em si é responsabilidade do
+// renderClock(), chamado separadamente em intervalo mais curto.
+function applySnapshot(d) {
+  lastSnapshot = d;
+  lastSyncPerfMs = performance.now();
+
+  // reset do aviso sonoro de "faltam 5s" sempre que a etapa muda —
+  // senão o aviso nunca dispararia de novo na etapa seguinte
+  if (d.started && d.current_step_index !== lastStepIndexSeen) {
+    lastStepIndexSeen = d.current_step_index;
+    stepEndWarningPlayedForThisStep = false;
+  }
+  if (d.started && !d.finished) {
+    maybePlayTargetTransitionSound(d);
+  }
+
+  document.getElementById('power_value').textContent = d.power || '--';
+  document.getElementById('cadence_value').textContent = d.cadence || '--';
+
+  document.getElementById('power_avg').textContent =
+    d.step_avg_power !== null && d.step_avg_power !== undefined ? `média da etapa: ${d.step_avg_power}` : '';
+  document.getElementById('cadence_avg').textContent =
+    d.step_avg_cadence !== null && d.step_avg_cadence !== undefined ? `média da etapa: ${d.step_avg_cadence}` : '';
+
+  renderTargetIndicators(d);
+  renderConnectionBanner(d);
+  renderSidebar(d);
+
+  const pauseBtn = document.getElementById('pause_btn');
+  pauseBtn.textContent = d.paused ? 'Retomar' : 'Pausar';
+  pauseBtn.classList.toggle('paused-tag', d.paused);
+
+  const panel = document.getElementById('step_panel');
+
+  if (d.finished) {
+    panel.innerHTML = '<div class="finished-banner">TREINO CONCLUÍDO</div>';
+    return;
+  }
+
+  // caso o painel tenha sido substituído pelo banner de "concluído" numa
+  // rodada anterior e o treino tenha sido reiniciado, garante que a
+  // estrutura original volta — sem isso, os ids internos (step_name etc)
+  // ficariam órfãos permanentemente após um innerHTML de "concluído".
+  if (!document.getElementById('step_content')) {
+    location.reload();
+    return;
+  }
+
+  // treino ainda não foi iniciado (started=false) — mostra o portão de
+  // início em vez do conteúdo normal da etapa. Sensores/conexão/sidebar já
+  // foram atualizados acima, então dá pra conferir se tudo conectou antes
+  // de clicar "Iniciar Treino".
+  const startGate = document.getElementById('start_gate');
+  const stepContent = document.getElementById('step_content');
+  if (!d.started) {
+    startGate.style.display = 'flex';
+    stepContent.style.display = 'none';
+    return;
+  }
+  startGate.style.display = 'none';
+  stepContent.style.display = 'flex';
+
+  document.getElementById('step_name').textContent = d.current_step_name || '--';
+  document.getElementById('step_counter').textContent =
+    (d.current_step_index + 1) + '/' + d.total_steps;
+
+  const targetEl = document.getElementById('step_target');
+  const hasLow = d.current_step_target_low !== null && d.current_step_target_low !== undefined;
+  const hasHigh = d.current_step_target_high !== null && d.current_step_target_high !== undefined;
+  if (d.current_step_target_type && d.current_step_target_type !== 'open' && hasLow) {
+    const label = TARGET_TYPE_LABELS[d.current_step_target_type] || d.current_step_target_type;
+    const unit = d.current_step_target_type === 'power' ? 'W'
+      : (d.current_step_target_type === 'heart_rate' ? 'bpm' : '');
+    const highPart = hasHigh ? `–${d.current_step_target_high}` : '';
+    targetEl.textContent = `${label} alvo: ${d.current_step_target_low}${highPart}${unit}`;
+  } else {
+    targetEl.textContent = '';
+  }
+
+  const tag = document.getElementById('intensity_tag');
+  const intensity = d.current_step_intensity || 'active';
+  tag.textContent = intensity;
+  tag.className = 'intensity-tag intensity-' + intensity;
+
+  const nextBtn = document.getElementById('next_btn');
+  const isOpenStep = d.step_remaining_seconds === null || d.step_remaining_seconds === undefined;
+  nextBtn.style.display = (isOpenStep && !d.paused) ? 'inline-block' : 'none';
+}
+
+// Roda a cada 250ms, independente do poll(). Recalcula os campos de tempo
+// por interpolação (baseline do último snapshot + tempo real decorrido) —
+// assim o relógio conta suave mesmo se o próximo poll atrasar.
+function renderClock() {
+  if (!lastSnapshot) return;
+  const d = lastSnapshot;
+
+  if (d.finished) return; // painel já virou o banner de concluído, nada a atualizar
+
+  const driftSeconds = d.paused ? 0 : (performance.now() - lastSyncPerfMs) / 1000;
+
+  const displayedTotal = d.total_elapsed_seconds + driftSeconds;
+  document.getElementById('total_time_value').textContent = fmtHMS(displayedTotal);
+
+  const remainEl = document.getElementById('step_remaining');
+  const progressFill = document.getElementById('progress_fill');
+  if (!remainEl || !progressFill) return; // painel pode ter virado outra coisa nesse meio tempo
+
+  if (d.paused) {
+    remainEl.innerHTML = '<span class="paused-tag">PAUSADO</span>';
+    return;
+  }
+
+  if (d.step_remaining_seconds === null || d.step_remaining_seconds === undefined) {
+    remainEl.textContent = 'LIVRE — aperte "avançar etapa"';
+    progressFill.style.width = '0%';
+    return;
+  }
+
+  const displayedStepElapsed = d.step_elapsed_seconds + driftSeconds;
+  const displayedRemaining = Math.max(0, d.step_duration_seconds - displayedStepElapsed);
+  remainEl.textContent = fmtMS(displayedRemaining);
+
+  const pct = d.step_duration_seconds ? 100 * (displayedStepElapsed / d.step_duration_seconds) : 0;
+  progressFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+
+  // aviso sonoro de "faltam ~5s" — dispara uma vez só por etapa (reset
+  // acontece em applySnapshot quando o índice da etapa muda)
+  if (displayedRemaining <= 5 && displayedRemaining > 0 && !stepEndWarningPlayedForThisStep) {
+    stepEndWarningPlayedForThisStep = true;
+    playStepEndingWarning();
+  }
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/snapshot');
+    applySnapshot(await res.json());
+    renderClock(); // atualiza na hora, não espera o próximo tick do renderClock
+  } catch (e) {
+    // servidor momentaneamente indisponível — próximo tick tenta de novo
+  }
+}
+
+document.getElementById('next_btn').addEventListener('click', () => {
+  fetch('/next_step', { method: 'POST' }).then(poll);
+});
+
+document.getElementById('start_btn').addEventListener('click', () => {
+  fetch('/start', { method: 'POST' }).then(poll);
+
+  // tela cheia automática — precisa ser chamado direto num clique do
+  // usuário (gesture), por isso fica aqui e não em applySnapshot/poll
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {
+      // navegador recusou (ex: já em fullscreen, ou contexto restrito) — sem problema
+    });
+  }
+});
+
+document.getElementById('sound_toggle_btn').addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  document.getElementById('sound_toggle_btn').textContent = soundEnabled ? '🔊 Som: ligado' : '🔇 Som: mudo';
+});
+
+document.getElementById('pause_btn').addEventListener('click', () => {
+  const isPaused = document.getElementById('pause_btn').textContent === 'Retomar';
+  const endpoint = isPaused ? '/resume' : '/pause';
+  fetch(endpoint, { method: 'POST' }).then(poll);
+});
+
+// Função auxiliar: dispara o download de uma URL criando um link temporário
+// e clicando nele — funciona bem pra respostas com Content-Disposition:
+// attachment (nosso /export/* e /recover/export/* já mandam assim).
+function triggerDownload(url) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+document.getElementById('stop_btn').addEventListener('click', () => {
+  document.getElementById('stop_modal_status').textContent = '';
+  document.getElementById('stop_modal_overlay').classList.add('visible');
+});
+
+document.getElementById('stop_modal_cancel').addEventListener('click', () => {
+  document.getElementById('stop_modal_overlay').classList.remove('visible');
+});
+
+document.getElementById('stop_modal_confirm').addEventListener('click', async () => {
+  const statusEl = document.getElementById('stop_modal_status');
+  const confirmBtn = document.getElementById('stop_modal_confirm');
+  confirmBtn.disabled = true;
+  statusEl.classList.remove('error');
+  statusEl.textContent = 'Encerrando e exportando...';
+
+  try {
+    await fetch('/stop', { method: 'POST' });
+    // dispara os dois downloads — acontece aqui, no clique, ANTES de
+    // qualquer possibilidade de fechar a aba (não depende do evento de
+    // unload do navegador, que não é confiável pra isso).
+    triggerDownload('/export/tcx');
+    triggerDownload('/export/xlsx');
+    statusEl.textContent = 'Treino encerrado — .tcx e .xlsx baixados.';
+  } catch (e) {
+    statusEl.classList.add('error');
+    statusEl.textContent = 'Erro ao exportar — tente pelos botões "Exportar" no topo.';
+  }
+
+  confirmBtn.disabled = false;
+  poll();
+  setTimeout(() => {
+    document.getElementById('stop_modal_overlay').classList.remove('visible');
+  }, 1500);
+});
+
+// ---- recuperação de sessão órfã (processo anterior morreu sem exportar) ----
+async function checkRecoverableSession() {
+  try {
+    const res = await fetch('/recover');
+    const data = await res.json();
+    if (!data.has_orphan) return;
+
+    document.getElementById('recover_banner_text').textContent =
+      `Sessão anterior não exportada encontrada (${data.sample_count} amostras registradas).`;
+    document.getElementById('recover_banner').classList.add('visible');
+  } catch (e) {
+    // se /recover falhar por qualquer motivo, simplesmente não mostra o banner
+  }
+}
+
+document.getElementById('recover_export_btn').addEventListener('click', () => {
+  triggerDownload('/recover/export/tcx');
+  triggerDownload('/recover/export/xlsx');
+  document.getElementById('recover_banner').classList.remove('visible');
+});
+
+document.getElementById('recover_dismiss_btn').addEventListener('click', async () => {
+  await fetch('/recover/dismiss', { method: 'POST' });
+  document.getElementById('recover_banner').classList.remove('visible');
+});
+
+checkRecoverableSession();
+
+
+document.getElementById('reconnect_btn').addEventListener('click', () => {
+  fetch('/reconnect', { method: 'POST' });
+});
+
+poll();
+setInterval(poll, POLL_INTERVAL_MS);
+setInterval(renderClock, CLOCK_RENDER_INTERVAL_MS);
+
+// Ao fechar a aba (ou recarregar — o navegador não diferencia os dois
+// eventos), avisa o servidor pra se encerrar sozinho via sendBeacon
+// (mais confiável que fetch() nesse momento, projetado especificamente
+// pra sobreviver ao unload da página sem ser cancelado no meio).
+window.addEventListener('pagehide', () => {
+  navigator.sendBeacon('/shutdown');
+});
+</script>
+
+</body>
+</html>
